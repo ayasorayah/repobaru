@@ -1,73 +1,35 @@
 import { fetchUsers } from "./data.js";
+import { formatCurrency, formatDate } from "./utils/format.js";
+import { showLoading, showError, el, renderCardList, badge } from "./utils/dom.js";
+import { required, isEmail, collectErrors } from "./utils/validate.js";
 
-export async function renderUsers(container) {
-  // Loading state (duplicated across every view module)
-  container.innerHTML = '<div class="loading">Loading…</div>';
-
-  let users;
-  try {
-    users = await fetchUsers();
-  } catch (err) {
-    container.innerHTML = '<div class="error">Failed to load: ' + err.message + "</div>";
-    return;
-  }
-
-  const title = document.createElement("h2");
-  title.className = "section-title";
-  title.textContent = "Users";
-
-  container.innerHTML = "";
-  container.appendChild(title);
-
-  users.forEach((user) => {
-    const card = document.createElement("div");
-    card.className = "card";
-
-    const heading = document.createElement("h3");
-    // Escape HTML to avoid injection (duplicated across every view module)
-    heading.textContent = String(user.name).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    card.appendChild(heading);
-
-    const email = document.createElement("p");
-    email.textContent = user.email;
-    card.appendChild(email);
-
-    // Format currency (duplicated across every view module)
-    const balance = document.createElement("p");
-    balance.textContent = "Balance: $" + Number(user.balance).toFixed(2);
-    card.appendChild(balance);
-
-    // Format date (duplicated across every view module)
-    const joined = document.createElement("p");
-    const d = new Date(user.joined);
-    const joinedStr =
-      d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-    joined.textContent = "Joined: " + joinedStr;
-    card.appendChild(joined);
-
-    // Status badge (duplicated across every view module)
-    const badge = document.createElement("span");
-    if (user.active) {
-      badge.className = "badge badge-green";
-      badge.textContent = "Active";
-    } else {
-      badge.className = "badge badge-gray";
-      badge.textContent = "Inactive";
-    }
-    card.appendChild(badge);
-
-    container.appendChild(card);
-  });
+function statusFor(user) {
+  return user.active ? { color: "green", label: "Active" } : { color: "gray", label: "Inactive" };
 }
 
-// Email validation (duplicated across every view module)
+function userCard(user) {
+  const card = el("div", { className: "card" });
+  card.appendChild(el("h3", { html: user.name }));
+  card.appendChild(el("p", { text: user.email }));
+  card.appendChild(el("p", { text: "Balance: " + formatCurrency(user.balance) }));
+  card.appendChild(el("p", { text: "Joined: " + formatDate(user.joined) }));
+  card.appendChild(badge(statusFor(user)));
+  return card;
+}
+
+export async function renderUsers(container) {
+  showLoading(container);
+  try {
+    const users = await fetchUsers();
+    renderCardList(container, "Users", users, userCard);
+  } catch (err) {
+    showError(container, err.message);
+  }
+}
+
 export function validateUser(user) {
-  const errors = [];
-  if (!user.name || String(user.name).trim() === "") {
-    errors.push("Name is required");
-  }
-  if (!user.email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(user.email)) {
-    errors.push("A valid email is required");
-  }
-  return errors;
+  return collectErrors([
+    [required(user.name), "Name is required"],
+    [isEmail(user.email), "A valid email is required"],
+  ]);
 }
